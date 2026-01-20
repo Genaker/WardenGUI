@@ -49,10 +49,33 @@ pip install --upgrade --force-reinstall wardengui
 pip show wardengui
 ```
 
-### WSL Installation
+### WSL / Linux Installation
 
+> ⚠️ **Note:** WardenGUI uses **only Python standard library** - no external dependencies! 
+> Using `--break-system-packages` is completely safe as it won't affect any system packages.
+
+**Option 1: Direct install (recommended)**
 ```bash
 pip3 install --break-system-packages wardengui
+```
+
+**Option 2: Using pipx (isolated environment)**
+```bash
+sudo apt install pipx
+pipx ensurepath
+pipx install wardengui
+```
+
+**Option 3: User install without breaking system**
+```bash
+pip3 install --user wardengui
+```
+
+**Option 4: Virtual environment**
+```bash
+python3 -m venv ~/.wardengui-venv
+~/.wardengui-venv/bin/pip install wardengui
+~/.wardengui-venv/bin/wardengui
 ```
 
 ### Troubleshooting: Command Not Found
