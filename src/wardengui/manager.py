@@ -403,3 +403,16 @@ class WardenManager:
             os.system(f"wsl bash -c '{cmd}'")
         else:
             os.system(cmd)
+    
+    def get_git_remote_url(self, project_path: str) -> Optional[str]:
+        """Get GitHub/Git remote URL for a project."""
+        result = self._run_cmd(["bash", "-c", f"cd {project_path} && git remote get-url origin 2>/dev/null"])
+        url = result.stdout.strip()
+        if url:
+            # Convert SSH to HTTPS format for display
+            if url.startswith('git@github.com:'):
+                url = url.replace('git@github.com:', 'https://github.com/').replace('.git', '')
+            elif url.endswith('.git'):
+                url = url[:-4]
+            return url
+        return None

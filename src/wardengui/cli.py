@@ -201,6 +201,11 @@ def display_menu(warden: WardenManager, projects, running_env, selected_idx, doc
         print(f"  📁 Path:        {selected.get('path', 'N/A')}")
         print(f"  🌐 URL:         https://{full_url}/")
         
+        # Show GitHub repo if available
+        git_url = warden.get_git_remote_url(selected.get('path', ''))
+        if git_url:
+            print(f"  📦 Repo:        {git_url}")
+        
         # Check hosts file on Windows
         hosts_ip = warden.check_hosts_file(full_url)
         if platform.system() == 'Windows':
