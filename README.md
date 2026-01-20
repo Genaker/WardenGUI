@@ -73,7 +73,7 @@ wardengui
 
 **Fix 3: Use Python module**
 ```bash
-python3 -m wardengui.cli
+python3 -m wardengui
 ```
 
 ## Usage
