@@ -318,7 +318,7 @@ def parse_command(cmd):
         return 'up'
     elif cmd_lower in ('d', 'down'):
         return 'down'
-    elif cmd_lower in ('q', 'quit', 'exit'):
+    elif cmd_lower in ('q', 'quit', 'exit', 'e'):
         return 'quit'
     elif cmd_lower in ('s', 'ssh', 'shell'):
         return 'ssh'
