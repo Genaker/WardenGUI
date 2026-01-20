@@ -4,7 +4,11 @@ import platform
 import os
 import sys
 
-from .manager import WardenManager, CommandResult
+# Support both direct execution and module import
+try:
+    from .manager import WardenManager, CommandResult
+except ImportError:
+    from manager import WardenManager, CommandResult
 
 # Config
 DEFAULT_PROJECTS_ROOT = "~"
