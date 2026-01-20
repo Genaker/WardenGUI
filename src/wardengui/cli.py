@@ -238,9 +238,10 @@ def display_menu(warden: WardenManager, projects, running_env, selected_idx, doc
             loading = "⏳" if warden.is_volume_loading(env_name) else ""
             vol_lines.append(f"  {loading} loading sizes...")
         
-        # Prepare container lines
+        # Prepare container lines (sorted alphabetically)
         cont_lines = []
-        for c in containers[:6]:
+        sorted_containers = sorted(containers, key=lambda x: x['name'])
+        for c in sorted_containers[:6]:
             icon = "🟢" if c['running'] else "⚫"
             cont_lines.append(f"{icon} {c['name']}")
         
