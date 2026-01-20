@@ -17,6 +17,12 @@ A terminal-based GUI for managing [Warden](https://warden.dev/) Docker developme
 
 ## Installation
 
+### Quick Install (One-liner)
+
+```bash
+curl -sSL https://raw.githubusercontent.com/Genaker/WardenGUI/main/install.sh | bash
+```
+
 ### From PyPI
 
 ```bash
