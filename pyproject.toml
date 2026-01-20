@@ -4,10 +4,9 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "wardengui"
-version = "1.0.0"
+version = "1.0.1"
 description = "A terminal GUI for managing Warden Docker environments"
 readme = "README.md"
-license = {text = "MIT"}
 authors = [
     {name = "Yehor Shytikov", email = "yehor@example.com"}
 ]
@@ -31,8 +30,8 @@ requires-python = ">=3.8"
 dependencies = []
 
 [project.urls]
-Homepage = "https://github.com/pwa-builder/wardengui"
-Repository = "https://github.com/pwa-builder/wardengui"
+Homepage = "https://github.com/Genaker/WardenGUI"
+Repository = "https://github.com/Genaker/WardenGUI"
 
 [project.scripts]
 wardengui = "wardengui.cli:main"

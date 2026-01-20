@@ -26,9 +26,33 @@ pip install wardengui
 ### From Source
 
 ```bash
-git clone https://github.com/pwa-builder/wardengui.git
-cd wardengui
+git clone https://github.com/Genaker/WardenGUI.git
+cd WardenGUI
 pip install -e .
+```
+
+### Upgrade to Latest Version
+
+```bash
+pip install --upgrade wardengui
+```
+
+Or force reinstall:
+
+```bash
+pip install --upgrade --force-reinstall wardengui
+```
+
+### Check Installed Version
+
+```bash
+pip show wardengui
+```
+
+### WSL Installation
+
+```bash
+pip3 install --break-system-packages wardengui
 ```
 
 ## Usage
