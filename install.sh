@@ -29,18 +29,18 @@ echo "✓ Python version: $PY_VERSION"
 echo ""
 echo "📦 Installing wardengui..."
 
-# Try different installation methods
-if $PYTHON -m pip install --user wardengui 2>/dev/null; then
-    echo "✓ Installed with --user flag"
-elif $PYTHON -m pip install --break-system-packages wardengui 2>/dev/null; then
+# Try different installation methods (--break-system-packages is default for modern Linux)
+if $PYTHON -m pip install --break-system-packages wardengui 2>/dev/null; then
     echo "✓ Installed with --break-system-packages"
-elif pip3 install --user wardengui 2>/dev/null; then
-    echo "✓ Installed with pip3 --user"
 elif pip3 install --break-system-packages wardengui 2>/dev/null; then
     echo "✓ Installed with pip3 --break-system-packages"
+elif $PYTHON -m pip install --user wardengui 2>/dev/null; then
+    echo "✓ Installed with --user flag"
+elif pip3 install --user wardengui 2>/dev/null; then
+    echo "✓ Installed with pip3 --user"
 else
     echo "⚠️  Standard install failed, trying with sudo..."
-    sudo $PYTHON -m pip install wardengui || sudo pip3 install wardengui
+    sudo $PYTHON -m pip install --break-system-packages wardengui || sudo pip3 install --break-system-packages wardengui
 fi
 
 # Add ~/.local/bin to PATH if needed
