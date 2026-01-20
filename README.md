@@ -55,6 +55,27 @@ pip show wardengui
 pip3 install --break-system-packages wardengui
 ```
 
+### Troubleshooting: Command Not Found
+
+If you see `wardengui: command not found` after installation, the scripts are installed in `~/.local/bin` which is not in your PATH.
+
+**Fix 1: Add to PATH (permanent)**
+```bash
+echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
+source ~/.bashrc
+wardengui
+```
+
+**Fix 2: Run directly**
+```bash
+~/.local/bin/wardengui
+```
+
+**Fix 3: Use Python module**
+```bash
+python3 -m wardengui.cli
+```
+
 ## Usage
 
 ```bash
