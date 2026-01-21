@@ -36,7 +36,23 @@ else
     cd "$INSTALL_DIR"
 fi
 
-# Create wrapper script
+# Install the package in editable mode
+echo ""
+echo "📦 Installing wardengui from source..."
+if $PYTHON -m pip install -e . --break-system-packages 2>/dev/null; then
+    echo "✓ Installed with --break-system-packages"
+elif pip3 install -e . --break-system-packages 2>/dev/null; then
+    echo "✓ Installed with pip3 --break-system-packages"
+elif $PYTHON -m pip install -e . --user 2>/dev/null; then
+    echo "✓ Installed with --user flag"
+elif pip3 install -e . --user 2>/dev/null; then
+    echo "✓ Installed with pip3 --user"
+else
+    echo "⚠️  Standard install failed, trying with sudo..."
+    sudo $PYTHON -m pip install -e . --break-system-packages || sudo pip3 install -e . --break-system-packages
+fi
+
+# Create wrapper script (fallback if PATH not set)
 LOCAL_BIN="$HOME/.local/bin"
 mkdir -p "$LOCAL_BIN"
 

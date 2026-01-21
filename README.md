@@ -7,13 +7,15 @@ A terminal-based GUI for managing [Warden](https://warden.dev/) Docker developme
 
 ## Features
 
-- 🐳 **Interactive Menu** - Navigate and manage multiple Warden environments
-- 🔄 **Environment Switching** - Stop current and start new environments with one command
+- 🐳 **Interactive Menu** - Navigate and manage multiple Warden environments with visual selection
+- 🔄 **Environment Switching** - Automatically stop current and start new environments with one command
 - 📊 **Docker Stats** - View disk usage for images and volumes
-- 🔌 **SSH Access** - Quick shell access to running containers
-- 📋 **Log Streaming** - Follow container logs in real-time
+- 🔌 **SSH Access** - Quick shell access to running containers (GUI and headless mode)
+- 📋 **Log Streaming** - Follow container logs in real-time with customizable tail options
 - 🏠 **Hosts File Check** - Windows hosts file validation
 - ⌨️ **Terminal Commands** - Run warden commands directly from the GUI
+- 🚀 **Headless Mode** - Run commands via CLI without interactive GUI (start, info, ssh, log)
+- 🎨 **Modern UI** - Clean, business-like terminal interface with clickable URLs
 
 ## Installation
 
@@ -133,24 +135,63 @@ wardengui --down
 
 ## Commands
 
-### Navigation
+### Interactive GUI Mode
+
+**Navigation:**
 | Command | Description |
 |---------|-------------|
-| `↑/↓` or `u/d` | Navigate menu |
+| `↑/↓` or `u/d` | Navigate menu up/down |
 | `0-9` | Select environment by number |
 | `Enter` or `start` | Start selected environment |
-| `q` or `quit` | Exit |
+| `q` or `quit` | Exit application |
+| `help` or `?` | Show available commands |
 
-### Environment Commands
+**Environment Actions:**
 | Command | Description |
 |---------|-------------|
 | `ssh` or `s` | SSH into running environment |
-| `log` | Follow all container logs |
+| `log` or `logs` | Follow all container logs |
 | `log nginx` | Follow specific service logs |
 | `ls` | List running containers |
-| `run <cmd>` | Run one-off command |
+| `run <cmd>` | Run one-off warden command |
 | `port <svc>` | Show port bindings |
-| `help` or `?` | Show available commands |
+
+### Headless Mode (CLI)
+
+Run commands directly without the interactive GUI:
+
+```bash
+# Start an environment (stops current, starts new)
+wardengui myproject start
+
+# Show environment information
+wardengui myproject info
+# or simply
+wardengui myproject
+
+# SSH into running environment
+wardengui myproject ssh
+
+# View logs (last 100 lines)
+wardengui myproject log
+
+# View logs with custom tail
+wardengui myproject log --tail 50
+
+# Follow logs (tail -f)
+wardengui myproject log -f
+
+# Follow logs with custom tail
+wardengui myproject log --tail 200 -f
+```
+
+**Headless Mode Options:**
+| Option | Description |
+|--------|-------------|
+| `--tail N` | Show last N log lines (default: 100) |
+| `-f, --follow` | Follow log output (like `tail -f`) |
+| `-p, --projects-root` | Specify projects directory |
+| `-d, --down` | Use `env down/up` instead of `env stop/start` |
 
 ## Requirements
 
@@ -285,49 +326,170 @@ wardengui/
 ├── pyproject.toml          # Package configuration
 ├── README.md               # This file
 ├── LICENSE                 # MIT License
-├── .gitignore
+├── warden_gui.py           # Direct execution script
+├── build_and_push.sh       # Build and publish script
+├── tests/                  # Unit tests
+│   ├── test_headless.py    # Headless mode tests
+│   └── test_warden_mocking.py  # WardenManager tests
 └── src/
     └── wardengui/
         ├── __init__.py     # Package init, exports
-        ├── manager.py      # WardenManager class (core logic)
-        └── cli.py          # CLI entry point (GUI)
+        ├── __main__.py     # Module execution entry point
+        ├── warden.py       # WardenManager class (core logic)
+        ├── cli.py          # CLI entry point (GUI + headless)
+        └── colors.py       # ANSI color codes and formatting
 ```
 
 ## Configuration
 
 | Option | Default | Description |
 |--------|---------|-------------|
-| `-p, --projects-root` | `~` | Root directory to scan for projects |
-| `-d, --down` | `false` | Use `env down/up` instead of `env stop/start` |
+| `-p, --projects-root` | `~` | Root directory to scan for Warden projects |
+| `-d, --down` | `false` | Use `env down/up` instead of `env stop/start` (removes containers) |
+
+### Environment Variables
+
+WardenGUI automatically detects:
+- Warden installation at `/opt/warden/bin/warden`
+- WSL environment (for Windows users)
+- Docker availability
+- Project locations by scanning for `.warden` directories
+
+### Project Detection
+
+WardenGUI scans the specified directory (default: `~`) for directories containing `.warden` folders. Each project must have:
+- A `.warden` directory
+- A `.env` file with `WARDEN_ENV_NAME` defined
+
+Example project structure:
+```
+~/myproject/
+├── .warden/
+├── .env          # Contains WARDEN_ENV_NAME=myproject
+└── ...
+```
 
 ## Screenshot
 
-```
-╔══════════════════════════════════════════════════════════════╗
-║               🐳 WARDEN ENVIRONMENT MANAGER                  ║
-╠══════════════════════════════════════════════════════════════╣
-║  Commands: 0-9=select │ ssh │ start │ up/down │ quit │ help  ║
-╚══════════════════════════════════════════════════════════════╝
-  📊 Environments: 3 │ 💾 Images: 38.18GB │ Volumes: 17.9GB
+### Interactive GUI Mode
 
-  0. [lccoins] ○ STOPPED - app.lc.test
-  1. [api] ○ STOPPED - app.apitire.test
-▶ 2. [pei] ● RUNNING - app.peigenesis.test
+```
+🐳 WARDEN ENVIRONMENT MANAGER
+
+📦 ENVIRONMENTS:
+> 0. [myproject]  ● RUNNING  ->  https://app.example.test
+  1. [example]  ○ STOPPED  ->  https://app.demo.test
+  2. [test-env]  ○ STOPPED  ->  https://app.test.local
 
   q. [Exit]
 
-──────────────────────────────────────────────────────────────────
-  📋 PEI DETAILS
-──────────────────────────────────────────────────────────────────
-  📁 Path:        /home/user/pei-project
-  🌐 URL:         https://app.peigenesis.test/
-  🏠 Hosts:       ✅ 127.0.0.1 → app.peigenesis.test
-  💿 Volumes: 6                    🐳 Containers: 8/8 running
-    └─ applogs: 3.528GB            🟢 php-fpm
-    └─ appcode: 1.088GB            🟢 nginx
-──────────────────────────────────────────────────────────────────
+📋 MYPROJECT DETAILS:
+  📁 Path:        /home/user/myproject
+  🌐 URL:         https://app.example.test/
+  📦 Repo:        https://github.com/user/myproject
+  🏠 Hosts:       ✓ 127.0.0.1 -> app.example.test
+  🔧 Environment: myproject
+  📦 Type:        symfony
+  🐘 PHP:         8.4
+  🗄️  DB:          10.11
+  🔍 ES:          8.15.0
+  💾 Volumes: 6                     🐳Containers: 3/8 running
+  └─ dbdata: 8.58GB                ● php-fpm
+  └─ esdata: 43.45MB               ● nginx
+  └─ bashhistory: 1.401kB          ● elasticsearch
+  └─ sshdirectory: 278B            ○ db
+  └─ redis: 93B                    ○ elasticsearch-hq
+                                   ○ php-debug
 
->
+  ● Status: RUNNING
+```
+
+### Headless Mode Examples
+
+**Starting an environment:**
+```bash
+$ wardengui myproject start
+Stopping current environment 'example'...
+
+STOPPING EXAMPLE
+  $ cd /home/user/example && /opt/warden/bin/warden env stop
+
+  ✓ Container example-php-fpm-1 Stopped
+  ✓ Container example-nginx-1 Stopped
+  ✓ Environment example stopped successfully
+
+Starting environment 'myproject'...
+
+STARTING MYPROJECT
+  Step 1/3: Starting Warden services...
+  $ /opt/warden/bin/warden svc up -d
+
+  Running:
+    ● traefik
+    ● portainer
+  ✓ Warden services ready
+
+  Step 2/3: Starting myproject environment...
+  $ cd /home/user/myproject && /opt/warden/bin/warden env up -d
+
+  ✓ Container myproject-php-fpm-1 Created
+  ✓ Container myproject-php-fpm-1 Started
+  ✓ Container myproject-nginx-1 Started
+  ✓ Network myproject_default Created
+
+  Step 3/3: Restarting Warden services...
+  $ /opt/warden/bin/warden svc restart
+
+  ✓ Services restarted
+  ✓ Environment myproject started successfully
+
+✓ myproject is now running!
+  -> https://app.example.test/
+```
+
+**Viewing environment info:**
+```bash
+$ wardengui myproject info
+📋 MYPROJECT DETAILS:
+  📁 Path:        /home/user/myproject
+  🌐 URL:         https://app.example.test/
+  📦 Repo:        https://github.com/user/myproject
+  🔧 Environment: myproject
+  📦 Type:        symfony
+  🐘 PHP:         8.4
+  🗄️  DB:          10.11
+  🔍 ES:          8.15.0
+  💾 Volumes: 6                     🐳Containers: 8/8 running
+  └─ dbdata: 12.3GB                ● php-fpm
+  └─ appcode: 2.1GB                ● nginx
+  └─ esdata: 156MB                 ● elasticsearch
+  └─ bashhistory: 2.1kB            ● db
+  └─ redis: 93B                    ● elasticsearch-hq
+                                   ● php-debug
+
+  ● Status: RUNNING
+```
+
+**SSH access:**
+```bash
+$ wardengui myproject ssh
+🔌 Connecting to myproject...
+  $ cd /home/user/myproject && /opt/warden/bin/warden shell
+
+Type 'exit' to return.
+
+[user@myproject-php-fpm-1 /app]$ 
+```
+
+**Viewing logs:**
+```bash
+$ wardengui myproject log --tail 50 -f
+📋 Showing logs for myproject...
+  $ cd /home/user/myproject && /opt/warden/bin/warden env logs --tail 50 -f
+
+Press Ctrl+C to stop following logs.
+
+[Log output follows...]
 ```
 
 ## License
