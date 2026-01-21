@@ -9,9 +9,11 @@ from typing import List, Dict, Any, Optional, Union, Tuple
 try:
     from .warden import WardenManager, CommandResult
     from .colors import Colors
+    from .system_test import SystemTester
 except ImportError:
     from warden import WardenManager, CommandResult
     from colors import Colors
+    from system_test import SystemTester
 
 # Config
 DEFAULT_PROJECTS_ROOT = "~"
@@ -396,6 +398,10 @@ def parse_command(cmd: str) -> Union[str, Tuple[str, Union[int, str]], None]:
         return 'quit'
     elif cmd_lower in ('s', 'ssh', 'shell'):
         return 'ssh'
+    elif cmd_lower in ('h', 'htop', 'top'):
+        return 'htop'
+    elif cmd_lower == 'test':
+        return 'test'
     elif cmd_lower in ('start',):
         return 'enter'
     elif cmd_lower.isdigit():
@@ -432,6 +438,28 @@ def _handle_ssh_command(
                 print(f"{Colors.GRAY}  $ {warden.get_shell_command(proj['path'])}{Colors.RESET}")
                 print("\nType 'exit' to return to the menu.\n")
                 warden.open_shell(proj['path'])
+                break
+    else:
+        print()
+        print(f"{Colors.YELLOW}⚠  No Environment Running{Colors.RESET}")
+        print(f"  Select an environment and press Enter to start it.")
+        wait_for_enter()
+
+
+def _handle_htop_command(
+    warden: WardenManager,
+    projects: List[Dict[str, Any]],
+    running_env: Optional[str]
+) -> None:
+    """Handle htop command to run htop/top in running environment."""
+    if running_env:
+        for proj in projects:
+            if proj.get('WARDEN_ENV_NAME') == running_env:
+                clear_screen()
+                print(f"📊 Running htop/top in {running_env}...")
+                print(f"{Colors.GRAY}  $ cd {proj['path']} && warden shell -c 'htop || top'{Colors.RESET}")
+                print("\nPress 'q' to quit htop/top and return to the menu.\n")
+                warden.run_htop(proj['path'])
                 break
     else:
         print()
@@ -659,6 +687,79 @@ def _headless_ssh(warden: WardenManager, env_name: str, projects: List[Dict[str,
     warden.open_shell(project['path'])
 
 
+def _headless_htop(warden: WardenManager, env_name: str, projects: List[Dict[str, Any]]) -> None:
+    """Run htop/top inside running environment in headless mode."""
+    project = _find_project_by_name(env_name, projects)
+    
+    if not project:
+        print(f"{Colors.RED}✗ Environment '{env_name}' not found.{Colors.RESET}")
+        print(f"   Available environments:")
+        for proj in projects:
+            print(f"     - {proj.get('WARDEN_ENV_NAME')}")
+        sys.exit(1)
+        return  # Never reached, but helps with type checking
+    
+    running_env = warden.get_running_environment()
+    if env_name != running_env:
+        print(f"{Colors.YELLOW}⚠ Environment '{env_name}' is not running.{Colors.RESET}")
+        print(f"   Currently running: {running_env if running_env else 'none'}")
+        print(f"   Start it first with: wardengui {env_name} start")
+        sys.exit(1)
+        return  # Never reached, but helps with type checking
+    
+    print(f"📊 Running htop/top in {env_name}...")
+    print(f"{Colors.GRAY}  $ cd {project['path']} && warden shell -c 'htop || top'{Colors.RESET}")
+    print("\nPress 'q' to quit htop/top.\n")
+    warden.run_htop(project['path'])
+
+
+def _run_system_tests(projects_root: str) -> None:
+    """Run system tests."""
+    sys.stdout.flush()  # Ensure output is flushed
+    
+    try:
+        tester = SystemTester(projects_root)
+    except Exception as e:
+        print(f"{Colors.RED}✗ Failed to initialize system tester: {e}{Colors.RESET}")
+        print()
+        wait_for_enter()
+        return
+    
+    print(f"{Colors.BOLD}🔍 SYSTEM TESTS{Colors.RESET}")
+    print()
+    print(f"Testing path: {projects_root}")
+    print()
+    sys.stdout.flush()
+    
+    results = tester.run_all_tests(projects_root)
+    
+    passed_count = sum(1 for r in results if r.passed)
+    total_count = len(results)
+    
+    for result in results:
+        status_icon = f"{Colors.GREEN}✓{Colors.RESET}" if result.passed else f"{Colors.RED}✗{Colors.RESET}"
+        status_color = Colors.GREEN if result.passed else Colors.RED
+        
+        print(f"  {status_icon} {Colors.BOLD}{result.name}:{Colors.RESET} ", end="")
+        sys.stdout.flush()
+        if result.passed:
+            print(f"{status_color}{result.message}{Colors.RESET}")
+        else:
+            print(f"{status_color}{result.message}{Colors.RESET}")
+        sys.stdout.flush()
+    
+    print()
+    print(f"  Results: {Colors.GREEN if passed_count == total_count else Colors.YELLOW}{passed_count}/{total_count} tests passed{Colors.RESET}")
+    
+    if passed_count < total_count:
+        print()
+        print(f"  {Colors.YELLOW}⚠ Some tests failed. Check the messages above for details.{Colors.RESET}")
+    
+    print()
+    sys.stdout.flush()
+    wait_for_enter()
+
+
 def _headless_log(warden: WardenManager, env_name: str, projects: List[Dict[str, Any]], tail: int = 100, follow: bool = False) -> None:
     """Show logs for environment in headless mode."""
     project = _find_project_by_name(env_name, projects)
@@ -715,7 +816,7 @@ def main() -> None:
     # Parse arguments
     parser = argparse.ArgumentParser(
         description="Warden Environment Manager GUI",
-        epilog="Examples:\n  wardengui                    # Interactive GUI\n  wardengui pei start          # Start 'pei' environment\n  wardengui pei info           # Show 'pei' info\n  wardengui pei ssh            # SSH into 'pei' environment\n  wardengui pei log            # Show 'pei' logs\n  wardengui pei log --tail 50  # Show last 50 lines\n  wardengui pei log -f         # Follow logs (tail -f)",
+        epilog="Examples:\n  wardengui                    # Interactive GUI\n  wardengui pei start          # Start 'pei' environment\n  wardengui pei info           # Show 'pei' info\n  wardengui pei ssh            # SSH into 'pei' environment\n  wardengui pei log            # Show 'pei' logs\n  wardengui pei log --tail 50  # Show last 50 lines\n  wardengui pei log -f         # Follow logs (tail -f)\n  wardengui pei htop           # Run htop/top in 'pei' container\n  wardengui test               # Run system tests\n  wardengui test -p /path      # Test specific path",
         formatter_class=argparse.RawDescriptionHelpFormatter
     )
     parser.add_argument("-p", "--projects-root", default=DEFAULT_PROJECTS_ROOT,
@@ -723,14 +824,52 @@ def main() -> None:
     parser.add_argument("-d", "--down", action="store_true",
                         help="Use 'env down/up' instead of 'env stop/start' (removes containers)")
     parser.add_argument("env_name", nargs="?", help="Environment name for headless mode (e.g., 'pei')")
-    parser.add_argument("action", nargs="?", choices=["start", "info", "ssh", "log"], 
-                        help="Action: 'start' to start environment, 'info' to show info, 'ssh' to open shell, 'log' to show logs")
+    parser.add_argument("action", nargs="?", choices=["start", "info", "ssh", "log", "test", "htop"], 
+                        help="Action: 'start' to start environment, 'info' to show info, 'ssh' to open shell, 'log' to show logs, 'test' to run system tests, 'htop' to run htop/top")
     parser.add_argument("--tail", type=int, default=100, metavar="N",
                         help="Number of log lines to show (default: 100)")
     parser.add_argument("-f", "--follow", action="store_true",
                         help="Follow log output (like tail -f)")
     
-    args = parser.parse_args()
+    # Parse arguments with custom handling for test command
+    args, unknown = parser.parse_known_args()
+    
+    # Check if "test" is the first positional argument (before env_name)
+    positional_args = [arg for arg in sys.argv[1:] if not arg.startswith('-') and arg not in ['start', 'info', 'ssh', 'log', 'htop']]
+    
+    # Handle test command (can be first argument without env_name)
+    if positional_args and positional_args[0] == "test":
+        args.action = "test"
+        args.env_name = None
+    elif args.action == "test":
+        # test is already set as action
+        pass
+    elif args.env_name == "test" and not args.action:
+        # "test" was parsed as env_name, but it should be action
+        args.action = "test"
+        args.env_name = None
+    
+    # Validate action if provided
+    valid_actions = ["start", "info", "ssh", "log", "test", "htop"]
+    if args.action and args.action not in valid_actions:
+        print(f"{Colors.RED}✗ Unknown command: '{args.action}'{Colors.RESET}")
+        print()
+        print(f"{Colors.BOLD}Available commands:{Colors.RESET}")
+        print(f"  wardengui                    # Interactive GUI")
+        print(f"  wardengui test               # Run system tests")
+        print(f"  wardengui <env> start        # Start environment")
+        print(f"  wardengui <env> info         # Show environment info")
+        print(f"  wardengui <env> ssh          # SSH into environment")
+        print(f"  wardengui <env> log          # Show logs")
+        print(f"  wardengui <env> log -f       # Follow logs")
+        print(f"  wardengui <env> htop         # Run htop/top")
+        print()
+        sys.exit(1)
+    
+    # Test mode: run system tests (can be called without env_name or projects)
+    if args.action == "test":
+        _run_system_tests(args.projects_root)
+        return
     
     # Initialize Warden manager
     warden = WardenManager(args.projects_root, use_down=args.down)
@@ -763,10 +902,32 @@ def main() -> None:
         elif args.action == "log":
             _headless_log(warden, args.env_name, projects, tail=args.tail, follow=args.follow)
             return
+        elif args.action == "htop":
+            _headless_htop(warden, args.env_name, projects)
+            return
+        elif args.action:
+            # Invalid action provided
+            print(f"{Colors.RED}✗ Unknown command: '{args.action}'{Colors.RESET}")
+            print()
+            print(f"{Colors.BOLD}Available commands:{Colors.RESET}")
+            print(f"  wardengui <env> start        # Start environment")
+            print(f"  wardengui <env> info         # Show environment info")
+            print(f"  wardengui <env> ssh          # SSH into environment")
+            print(f"  wardengui <env> log          # Show logs")
+            print(f"  wardengui <env> log -f       # Follow logs")
+            print(f"  wardengui <env> htop         # Run htop/top")
+            print()
+            sys.exit(1)
         else:
             # If env_name provided but no action, default to info
             _show_environment_info(warden, args.env_name, projects)
             return
+    
+    # Store projects_root for use in GUI mode
+    projects_root = args.projects_root
+    
+    # Store projects_root for use in GUI mode
+    projects_root = args.projects_root
     
     selected_idx = 0
     running_env = warden.get_running_environment()
@@ -790,6 +951,21 @@ def main() -> None:
         key = get_key()
         
         if key is None:
+            # Invalid command - show error message
+            print()
+            print(f"{Colors.RED}✗ Unknown command{Colors.RESET}")
+            print()
+            print(f"{Colors.BOLD}Available commands:{Colors.RESET}")
+            print(f"  0-9, ↑/↓, u/d    Navigate menu")
+            print(f"  Enter, start     Start selected environment")
+            print(f"  ssh, s            Connect to running environment")
+            print(f"  htop, h           Run htop/top in running environment")
+            print(f"  test              Run system tests")
+            print(f"  log, logs         Follow container logs")
+            print(f"  help, ?           Show help")
+            print(f"  quit, q           Exit")
+            print()
+            wait_for_enter()
             continue
         
         total_items = len(projects) + 1
@@ -800,6 +976,13 @@ def main() -> None:
             break
         elif key == 'ssh':
             _handle_ssh_command(warden, projects, running_env)
+        elif key == 'htop':
+            _handle_htop_command(warden, projects, running_env)
+        elif key == 'test':
+            clear_screen()
+            _run_system_tests(projects_root)
+            # After tests, redisplay menu
+            continue
         elif key == 'help':
             print()
             print(f"{Colors.BOLD}📖 AVAILABLE COMMANDS:{Colors.RESET}")
@@ -811,6 +994,8 @@ def main() -> None:
             print()
             print(f"  {Colors.BOLD}Actions:{Colors.RESET}")
             print(f"    ssh       Connect to running environment")
+            print(f"    htop      Run htop/top in running environment")
+            print(f"    test      Run system tests")
             print(f"    start     Start selected environment")
             print(f"    quit/q    Exit the application")
             print(f"    help/?    Show this help")
