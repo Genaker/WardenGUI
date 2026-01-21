@@ -19,6 +19,20 @@ except ImportError:
 DEFAULT_PROJECTS_ROOT = "~"
 
 
+def _print_splash_screen() -> None:
+    """Print ASCII art splash screen."""
+    ascii_art = """
+██╗    ██╗ █████╗ ██████╗ ██████╗ ███████╗███╗   ██╗     ██████╗ ██╗   ██╗██╗
+██║    ██║██╔══██╗██╔══██╗██╔══██╗██╔════╝████╗  ██║    ██╔════╝ ██║   ██║██║
+██║ █╗ ██║███████║██████╔╝██║  ██║█████╗  ██╔██╗ ██║    ██║  ███╗██║   ██║██║
+██║███╗██║██╔══██║██╔══██╗██║  ██║██╔══╝  ██║╚██╗██║    ██║   ██║██║   ██║██║
+╚███╔███╔╝██║  ██║██║  ██║██████╔╝███████╗██║ ╚████║    ╚██████╔╝╚██████╔╝██║
+ ╚══╝╚══╝ ╚═╝  ╚═╝╚═╝  ╚═╝╚═════╝ ╚══════╝╚═╝  ╚═══╝     ╚═════╝  ╚═════╝ ╚═╝
+    """
+    print(ascii_art)
+    print()
+
+
 def clear_screen() -> None:
     """Clear the terminal screen."""
     import subprocess
@@ -216,8 +230,8 @@ def _print_project_details(
     full_url = warden.get_project_url(project)
     volumes = warden.get_env_volumes(env_name)
     
+    # Volumes are already loaded during splash screen, get from cache
     vol_sizes, total_size = warden.get_cached_volume_sizes(env_name)
-    warden.load_volumes_async(env_name)
     
     # Header
     print(f"{Colors.BOLD}📋 {env_name.upper()} DETAILS:{Colors.RESET}")
@@ -259,9 +273,7 @@ def _print_project_details(
         for vol, (size_str, size_bytes) in sorted_vols:
             if size_bytes > 0:
                 vol_lines.append(f"  └─ {vol}: {size_str}")
-    else:
-        loading = "..." if warden.is_volume_loading(env_name) else ""
-        vol_lines.append(f"  {loading} loading sizes...")
+    # Volumes are preloaded during splash screen, so no loading message needed
     
     # Prepare container lines
     cont_lines = []
@@ -926,18 +938,34 @@ def main() -> None:
     # Store projects_root for use in GUI mode
     projects_root = args.projects_root
     
-    # Store projects_root for use in GUI mode
-    projects_root = args.projects_root
+    # Show splash screen while loading
+    clear_screen()
+    _print_splash_screen()
     
+    # Show loading progress
+    print(f"  {Colors.GRAY}$ docker ps --format '{{{{.Names}}}}'{Colors.RESET}")
+    print(f"  {Colors.BLUE}→{Colors.RESET} Loading running environments...")
+    sys.stdout.flush()
     selected_idx = 0
     running_env = warden.get_running_environment()
+    
+    print(f"  {Colors.GRAY}$ docker system df --format '{{{{json .}}}}'{Colors.RESET}")
+    print(f"  {Colors.BLUE}→{Colors.RESET} Loading Docker statistics...")
+    sys.stdout.flush()
     docker_stats = warden.get_docker_stats()
     
-    # Preload volume data
+    # Preload volume data synchronously
+    print(f"  {Colors.GRAY}$ docker system df -v{Colors.RESET}")
+    print(f"  {Colors.BLUE}→{Colors.RESET} Loading volume sizes...")
+    sys.stdout.flush()
     for proj in projects:
         env_name = proj.get('WARDEN_ENV_NAME', '')
         if env_name:
-            warden.load_volumes_async(env_name)
+            # Load volumes synchronously during splash screen and cache them
+            vol_sizes, total_size = warden.load_volume_sizes_sync(env_name)
+            # Cache the result so it's available when displaying
+            with warden._volume_cache_lock:
+                warden._volume_cache[env_name] = (vol_sizes, total_size)
     
     # Find and select currently running env
     for i, proj in enumerate(projects):
@@ -945,6 +973,11 @@ def main() -> None:
             selected_idx = i
             break
     
+    print(f"  {Colors.GREEN}✓{Colors.RESET} Ready!")
+    import time
+    time.sleep(0.3)  # Brief pause to show completion
+    
+    # Clear splash screen and show menu
     while True:
         display_menu(warden, projects, running_env, selected_idx, docker_stats)
         
