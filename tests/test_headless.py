@@ -17,6 +17,9 @@ from wardengui.cli import (
     _headless_start,
     _headless_ssh,
     _headless_log,
+    parse_command,
+    _handle_ssh_command,
+    _handle_db_connect_command,
     main
 )
 from wardengui.warden import WardenManager, CommandResult
@@ -544,8 +547,20 @@ class TestHeadlessSSHAndLog(unittest.TestCase):
         with patch('sys.stdout', new=StringIO()) as mock_stdout:
             _headless_ssh(self.mock_warden, 'test-env', self.projects)
         
-        self.mock_warden.open_shell.assert_called_once_with('/home/user/test-project')
-        self.mock_warden.get_shell_command.assert_called_once()
+        self.mock_warden.open_shell.assert_called_once_with('/home/user/test-project', None)
+        self.mock_warden.get_shell_command.assert_called_once_with('/home/user/test-project', None)
+    
+    def test_headless_ssh_with_container(self):
+        """Test SSH connection to specific container."""
+        self.mock_warden.get_running_environment.return_value = 'test-env'
+        self.mock_warden.get_shell_command.return_value = "cd /path && warden shell db"
+        self.mock_warden.open_shell = Mock()
+        
+        with patch('sys.stdout', new=StringIO()) as mock_stdout:
+            _headless_ssh(self.mock_warden, 'test-env', self.projects, container='db')
+        
+        self.mock_warden.open_shell.assert_called_once_with('/home/user/test-project', 'db')
+        self.mock_warden.get_shell_command.assert_called_once_with('/home/user/test-project', 'db')
     
     def test_headless_log_env_not_found(self):
         """Test log when environment not found."""
@@ -731,6 +746,151 @@ class TestWardenManagerMocking(unittest.TestCase):
         mock_start.assert_called_once()
         mock_print_details.assert_called_once()
         self.mock_warden.get_project_url.assert_called()
+
+
+class TestSSHContainerCommands(unittest.TestCase):
+    """Test SSH commands with container names."""
+    
+    def setUp(self):
+        """Set up test fixtures."""
+        self.mock_warden = Mock(spec=WardenManager)
+        self.mock_warden.WARDEN_PATH = "/opt/warden/bin/warden"
+        self.projects = [
+            {
+                'WARDEN_ENV_NAME': 'test-env',
+                'path': '/home/user/test-project',
+            }
+        ]
+    
+    def test_parse_command_ssh_default(self):
+        """Test parsing 'ssh' command."""
+        result = parse_command('ssh')
+        self.assertEqual(result, 'ssh')
+    
+    def test_parse_command_ssh_short(self):
+        """Test parsing 's' command."""
+        result = parse_command('s')
+        self.assertEqual(result, 'ssh')
+    
+    def test_parse_command_ssh_with_space(self):
+        """Test parsing 'ssh db' command."""
+        result = parse_command('ssh db')
+        self.assertIsInstance(result, tuple)
+        self.assertEqual(result[0], 'ssh')
+        self.assertEqual(result[1], 'db')
+    
+    def test_parse_command_ssh_with_space_php(self):
+        """Test parsing 'ssh php' command."""
+        result = parse_command('ssh php')
+        self.assertIsInstance(result, tuple)
+        self.assertEqual(result[0], 'ssh')
+        self.assertEqual(result[1], 'php')
+    
+    def test_parse_command_ssh_no_space(self):
+        """Test parsing 'sshdb' command."""
+        result = parse_command('sshdb')
+        self.assertIsInstance(result, tuple)
+        self.assertEqual(result[0], 'ssh')
+        self.assertEqual(result[1], 'db')
+    
+    def test_parse_command_ssh_no_space_php(self):
+        """Test parsing 'sshphp' command."""
+        result = parse_command('sshphp')
+        self.assertIsInstance(result, tuple)
+        self.assertEqual(result[0], 'ssh')
+        self.assertEqual(result[1], 'php')
+    
+    def test_parse_command_ssh_no_space_nginx(self):
+        """Test parsing 'sshnginx' command."""
+        result = parse_command('sshnginx')
+        self.assertIsInstance(result, tuple)
+        self.assertEqual(result[0], 'ssh')
+        self.assertEqual(result[1], 'nginx')
+    
+    def test_handle_ssh_command_with_container(self):
+        """Test _handle_ssh_command with container name."""
+        self.mock_warden.get_running_environment.return_value = 'test-env'
+        self.mock_warden.get_shell_command.return_value = "cd /path && warden shell db"
+        self.mock_warden.open_shell = Mock()
+        
+        with patch('wardengui.cli.clear_screen'), \
+             patch('wardengui.cli.wait_for_enter'), \
+             patch('sys.stdout', new=StringIO()):
+            _handle_ssh_command(self.mock_warden, self.projects, 'test-env', container='db')
+        
+        self.mock_warden.open_shell.assert_called_once_with('/home/user/test-project', 'db')
+        self.mock_warden.get_shell_command.assert_called_once_with('/home/user/test-project', 'db')
+    
+    def test_handle_ssh_command_default(self):
+        """Test _handle_ssh_command without container name."""
+        self.mock_warden.get_running_environment.return_value = 'test-env'
+        self.mock_warden.get_shell_command.return_value = "cd /path && warden shell"
+        self.mock_warden.open_shell = Mock()
+        
+        with patch('wardengui.cli.clear_screen'), \
+             patch('wardengui.cli.wait_for_enter'), \
+             patch('sys.stdout', new=StringIO()):
+            _handle_ssh_command(self.mock_warden, self.projects, 'test-env')
+        
+        self.mock_warden.open_shell.assert_called_once_with('/home/user/test-project', None)
+        self.mock_warden.get_shell_command.assert_called_once_with('/home/user/test-project', None)
+
+
+class TestDBConnectCommand(unittest.TestCase):
+    """Test db connect command."""
+    
+    def setUp(self):
+        """Set up test fixtures."""
+        self.mock_warden = Mock(spec=WardenManager)
+        self.mock_warden.WARDEN_PATH = "/opt/warden/bin/warden"
+        self.projects = [
+            {
+                'WARDEN_ENV_NAME': 'test-env',
+                'path': '/home/user/test-project',
+            }
+        ]
+    
+    def test_parse_command_db_connect(self):
+        """Test parsing 'db connect' command."""
+        result = parse_command('db connect')
+        self.assertEqual(result, 'db_connect')
+    
+    def test_parse_command_dbconnect(self):
+        """Test parsing 'dbconnect' command."""
+        result = parse_command('dbconnect')
+        self.assertEqual(result, 'db_connect')
+    
+    def test_parse_command_db(self):
+        """Test parsing 'db' command."""
+        result = parse_command('db')
+        self.assertEqual(result, 'db_connect')
+    
+    def test_handle_db_connect_command_with_running_env(self):
+        """Test _handle_db_connect_command with running environment."""
+        self.mock_warden.get_running_environment.return_value = 'test-env'
+        self.mock_warden.run_cmd_live = Mock()
+        
+        with patch('wardengui.cli.clear_screen'), \
+             patch('wardengui.cli.wait_for_enter'), \
+             patch('sys.stdout', new=StringIO()):
+            _handle_db_connect_command(self.mock_warden, self.projects, 'test-env')
+        
+        self.mock_warden.run_cmd_live.assert_called_once()
+        call_args = self.mock_warden.run_cmd_live.call_args[0][0]
+        self.assertIn('warden db connect', call_args)
+        self.assertIn('/home/user/test-project', call_args)
+    
+    def test_handle_db_connect_command_no_running_env(self):
+        """Test _handle_db_connect_command when no environment is running."""
+        self.mock_warden.get_running_environment.return_value = None
+        
+        with patch('wardengui.cli.wait_for_enter'), \
+             patch('sys.stdout', new=StringIO()) as mock_stdout:
+            _handle_db_connect_command(self.mock_warden, self.projects, None)
+        
+        output = mock_stdout.getvalue()
+        self.assertIn('No Environment Running', output)
+        self.mock_warden.run_cmd_live.assert_not_called()
 
 
 if __name__ == '__main__':

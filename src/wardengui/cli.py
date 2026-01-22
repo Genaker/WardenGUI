@@ -21,6 +21,10 @@ DEFAULT_PROJECTS_ROOT = "~"
 
 def _print_splash_screen() -> None:
     """Print ASCII art splash screen."""
+    # Set cursor to blinking block for loading screen
+    sys.stdout.write("\033[1 q")
+    sys.stdout.flush()
+    
     ascii_art = """
 ██╗    ██╗ █████╗ ██████╗ ██████╗ ███████╗███╗   ██╗     ██████╗ ██╗   ██╗██╗
 ██║    ██║██╔══██╗██╔══██╗██╔══██╗██╔════╝████╗  ██║    ██╔════╝ ██║   ██║██║
@@ -164,10 +168,14 @@ def _print_menu_header(docker_stats: Optional[Dict[str, Dict[str, str]]], num_pr
     print(f"{Colors.BOLD}  🐳 WARDEN ENVIRONMENT MANAGER:{Colors.RESET}")
     print(f"  Commands: 0-9=select │ ssh │ start │ ↑/↓ │ q=quit │ ?=help")
     
+    # Always show statistics
     if docker_stats:
         img = docker_stats.get('Images', {})
         vol = docker_stats.get('Local Volumes', {})
         print(f"  📊 Environments: {num_projects}  │  💾 Images: {img.get('size', 'N/A')}  │  💾 Volumes: {vol.get('size', 'N/A')}")
+    else:
+        # Fallback if stats not available
+        print(f"  📊 Environments: {num_projects}")
     print()
 
 
@@ -196,7 +204,7 @@ def _print_project_list(
         
         # Selection highlighting
         if is_selected:
-            prefix = "> "
+            prefix = f"{Colors.BLUE}->{Colors.RESET} "
             env_bg = Colors.BG_BLUE
             env_text_color = Colors.WHITE + Colors.BOLD
         else:
@@ -215,7 +223,7 @@ def _print_project_list(
     # Exit option
     exit_idx = len(projects)
     is_exit_selected = selected_idx == exit_idx
-    prefix = "> " if is_exit_selected else "  "
+    prefix = f"{Colors.BLUE}->{Colors.RESET} " if is_exit_selected else "  "
     
     print(f"{prefix}q. [Exit]")
     print()
@@ -385,15 +393,29 @@ def _read_raw_input() -> Union[str, Tuple[str, Union[int, str]], None]:
 
 def get_key() -> Union[str, Tuple[str, Union[int, str]], None]:
     """Get keypress or command. Arrow keys work, or type commands."""
+    # Set cursor to blinking block (DECSCUSR)
+    sys.stdout.write("\033[1 q")
+    sys.stdout.flush()
+    
     print("\n> ", end='', flush=True)
     
     try:
-        return _read_raw_input()
+        result = _read_raw_input()
+        # Restore default cursor
+        sys.stdout.write("\033[0 q")
+        sys.stdout.flush()
+        return result
     except (OSError, AttributeError):
         # Fallback for non-TTY (termios not available on Windows)
         cmd = input().strip()
+        # Restore default cursor
+        sys.stdout.write("\033[0 q")
+        sys.stdout.flush()
         return parse_command(cmd)
     except (EOFError, KeyboardInterrupt):
+        # Restore default cursor
+        sys.stdout.write("\033[0 q")
+        sys.stdout.flush()
         return 'quit'
 
 
@@ -401,19 +423,37 @@ def parse_command(cmd: str) -> Union[str, Tuple[str, Union[int, str]], None]:
     """Parse a typed command string."""
     if not cmd:
         return None
-    cmd_lower = cmd.lower()
+    cmd_lower = cmd.lower().strip()
     if cmd_lower in ('u', 'up'):
         return 'up'
     elif cmd_lower in ('d', 'down'):
         return 'down'
     elif cmd_lower in ('q', 'quit', 'exit', 'e'):
         return 'quit'
-    elif cmd_lower in ('s', 'ssh', 'shell'):
+    elif cmd_lower.startswith('ssh'):
+        # Handle ssh commands: ssh, sshdb, sshphp, ssh db, ssh php, etc.
+        if cmd_lower == 'ssh' or cmd_lower == 's' or cmd_lower == 'shell':
+            return 'ssh'
+        elif cmd_lower.startswith('ssh '):
+            # Handle "ssh db", "ssh php", etc. (with space)
+            parts = cmd_lower.split(None, 1)
+            if len(parts) > 1:
+                container = parts[1].strip()
+                if container:
+                    return ('ssh', container)
+            return 'ssh'
+        elif len(cmd_lower) > 3 and cmd_lower.startswith('ssh'):
+            # Extract container name (e.g., "sshdb" -> "db")
+            container = cmd_lower[3:]
+            if container:
+                return ('ssh', container)
         return 'ssh'
     elif cmd_lower in ('h', 'htop', 'top'):
         return 'htop'
     elif cmd_lower == 'test':
         return 'test'
+    elif cmd_lower in ('db connect', 'dbconnect', 'db'):
+        return 'db_connect'
     elif cmd_lower in ('start',):
         return 'enter'
     elif cmd_lower.isdigit():
@@ -439,17 +479,58 @@ def wait_for_enter() -> None:
 def _handle_ssh_command(
     warden: WardenManager,
     projects: List[Dict[str, Any]],
-    running_env: Optional[str]
+    running_env: Optional[str],
+    container: Optional[str] = None
 ) -> None:
     """Handle SSH command to connect to running environment."""
     if running_env:
         for proj in projects:
             if proj.get('WARDEN_ENV_NAME') == running_env:
                 clear_screen()
-                print(f"🔌 Connecting to {running_env}...")
-                print(f"{Colors.GRAY}  $ {warden.get_shell_command(proj['path'])}{Colors.RESET}")
+                if container:
+                    print(f"🔌 Connecting to {container} container in {running_env}...")
+                    print(f"{Colors.GRAY}  $ {warden.get_shell_command(proj['path'], container)}{Colors.RESET}")
+                else:
+                    print(f"🔌 Connecting to {running_env}...")
+                    print(f"{Colors.GRAY}  $ {warden.get_shell_command(proj['path'])}{Colors.RESET}")
                 print("\nType 'exit' to return to the menu.\n")
-                warden.open_shell(proj['path'])
+                warden.open_shell(proj['path'], container)
+                # After SSH exits, ask for user input
+                print()
+                print(f"{Colors.GREEN}✓{Colors.RESET} Disconnected from shell")
+                wait_for_enter()
+                break
+    else:
+        print()
+        print(f"{Colors.YELLOW}⚠  No Environment Running{Colors.RESET}")
+        print(f"  Select an environment and press Enter to start it.")
+        wait_for_enter()
+
+
+def _handle_db_connect_command(
+    warden: WardenManager,
+    projects: List[Dict[str, Any]],
+    running_env: Optional[str]
+) -> None:
+    """Handle db connect command to connect to database."""
+    if running_env:
+        for proj in projects:
+            if proj.get('WARDEN_ENV_NAME') == running_env:
+                clear_screen()
+                print(f"🗄️  Connecting to database in {running_env}...")
+                cmd = f"{warden.WARDEN_PATH} db connect"
+                print(f"{Colors.GRAY}  $ cd {proj['path']} && {cmd}{Colors.RESET}")
+                print("\nPress Ctrl+C to exit.\n")
+                
+                import shlex
+                safe_path = shlex.quote(proj['path'])
+                full_cmd = f"cd {safe_path} && {cmd}"
+                warden.run_cmd_live(full_cmd)
+                
+                # After db connect exits, ask for user input
+                print()
+                print(f"{Colors.GREEN}✓{Colors.RESET} Disconnected from database")
+                wait_for_enter()
                 break
     else:
         print()
@@ -942,30 +1023,49 @@ def main() -> None:
     clear_screen()
     _print_splash_screen()
     
-    # Show loading progress
+    # Show loading progress with timing
+    import time as time_module
+    
+    # Step 1: Loading running environments
     print(f"  {Colors.GRAY}$ docker ps --format '{{{{.Names}}}}'{Colors.RESET}")
-    print(f"  {Colors.BLUE}→{Colors.RESET} Loading running environments...")
-    sys.stdout.flush()
+    print(f"  {Colors.BLUE}->{Colors.RESET} Loading running environments...", end='', flush=True)
+    start_time = time_module.time()
     selected_idx = 0
     running_env = warden.get_running_environment()
+    elapsed = time_module.time() - start_time
+    print(f" {Colors.GREEN}-{Colors.RESET} ({elapsed:.2f}s)")
     
-    print(f"  {Colors.GRAY}$ docker system df --format '{{{{json .}}}}'{Colors.RESET}")
-    print(f"  {Colors.BLUE}→{Colors.RESET} Loading Docker statistics...")
-    sys.stdout.flush()
-    docker_stats = warden.get_docker_stats()
-    
-    # Preload volume data synchronously
+    # Step 2: Preload volume data and Docker statistics (optimized - single command for both)
     print(f"  {Colors.GRAY}$ docker system df -v{Colors.RESET}")
-    print(f"  {Colors.BLUE}→{Colors.RESET} Loading volume sizes...")
-    sys.stdout.flush()
+    print(f"  {Colors.BLUE}->{Colors.RESET} Loading volumes and Docker statistics...", end='', flush=True)
+    start_time = time_module.time()
+    
+    # Load all volumes and Docker stats at once (much faster - single command)
+    all_volumes, docker_stats = warden.load_all_volume_sizes_sync()
+    
+    # If parsing failed (empty dict), fallback to separate command
+    if not docker_stats or ('Images' not in docker_stats and 'Local Volumes' not in docker_stats):
+        # Fallback: try to get stats using the old method
+        docker_stats = warden.get_docker_stats()
+    
+    # Cache Docker stats for future use
+    warden._cached_docker_stats = docker_stats
+    
+    # Cache volume results for each project
     for proj in projects:
         env_name = proj.get('WARDEN_ENV_NAME', '')
         if env_name:
-            # Load volumes synchronously during splash screen and cache them
-            vol_sizes, total_size = warden.load_volume_sizes_sync(env_name)
-            # Cache the result so it's available when displaying
-            with warden._volume_cache_lock:
-                warden._volume_cache[env_name] = (vol_sizes, total_size)
+            if env_name in all_volumes:
+                vol_sizes, total_size = all_volumes[env_name]
+                with warden._volume_cache_lock:
+                    warden._volume_cache[env_name] = (vol_sizes, total_size)
+            else:
+                # No volumes found for this environment
+                with warden._volume_cache_lock:
+                    warden._volume_cache[env_name] = ({}, "0 B")
+    
+    elapsed = time_module.time() - start_time
+    print(f" {Colors.GREEN}-{Colors.RESET} ({elapsed:.2f}s)")
     
     # Find and select currently running env
     for i, proj in enumerate(projects):
@@ -976,6 +1076,10 @@ def main() -> None:
     print(f"  {Colors.GREEN}✓{Colors.RESET} Ready!")
     import time
     time.sleep(0.3)  # Brief pause to show completion
+    
+    # Restore default cursor before showing menu
+    sys.stdout.write("\033[0 q")
+    sys.stdout.flush()
     
     # Clear splash screen and show menu
     while True:
@@ -992,6 +1096,8 @@ def main() -> None:
             print(f"  0-9, ↑/↓, u/d    Navigate menu")
             print(f"  Enter, start     Start selected environment")
             print(f"  ssh, s            Connect to running environment")
+            print(f"  sshdb, sshphp     Connect to specific container")
+            print(f"  db connect        Connect to database")
             print(f"  htop, h           Run htop/top in running environment")
             print(f"  test              Run system tests")
             print(f"  log, logs         Follow container logs")
@@ -1009,6 +1115,11 @@ def main() -> None:
             break
         elif key == 'ssh':
             _handle_ssh_command(warden, projects, running_env)
+        elif isinstance(key, tuple) and key[0] == 'ssh':
+            # SSH to specific container (e.g., sshdb)
+            _handle_ssh_command(warden, projects, running_env, key[1])
+        elif key == 'db_connect':
+            _handle_db_connect_command(warden, projects, running_env)
         elif key == 'htop':
             _handle_htop_command(warden, projects, running_env)
         elif key == 'test':
@@ -1027,6 +1138,10 @@ def main() -> None:
             print()
             print(f"  {Colors.BOLD}Actions:{Colors.RESET}")
             print(f"    ssh       Connect to running environment")
+            print(f"    sshdb     Connect to database container")
+            print(f"    sshphp    Connect to PHP container")
+            print(f"    ssh<name> Connect to specific container")
+            print(f"    db connect Connect to database")
             print(f"    htop      Run htop/top in running environment")
             print(f"    test      Run system tests")
             print(f"    start     Start selected environment")
